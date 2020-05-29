@@ -115,46 +115,233 @@ public class AudioPlayerPlugin implements MethodCallHandler {
     if (audioPlayers.containsKey(playerId)) {
       player = getPlayer(playerId);
     }
-    if (call.method.equals("play") || call.method.equals("playAll") || player != null) { // check if player is released then do nothing
+    if (call.method.equals("play") || call.method.equals("playAll") || player != null) { // check if player is released
+                                                                                         // then do nothing
       switch (call.method) {
-      case "play": {
-        final String url = call.argument("url");
-        final boolean repeatMode = call.argument("repeatMode");
-        final boolean respectAudioFocus = call.argument("respectAudioFocus");
-        final boolean isBackground = call.argument("isBackground");
-        final int position = call.argument("position");
+        case "play": {
+          final String url = call.argument("url");
+          final boolean repeatMode = call.argument("repeatMode");
+          final boolean respectAudioFocus = call.argument("respectAudioFocus");
+          final boolean isBackground = call.argument("isBackground");
+          final int position = call.argument("position");
 
-        this.playerMode = PlayerMode.SINGLE;
-        if (isBackground) {
-          // init player as BackgroundAudioPlayer instance
-          this.audioObject = new AudioObject(url);
-          if (player != null && !player.isPlayerReleased()) {
-            player.play(this.audioObject, position);
+          this.playerMode = PlayerMode.SINGLE;
+          if (isBackground) {
+            // init player as BackgroundAudioPlayer instance
+            this.audioObject = new AudioObject(url);
+            if (player != null && !player.isPlayerReleased()) {
+              player.play(this.audioObject, position);
+            } else {
+              player = new BackgroundAudioPlayer();
+              player.initAudioPlayer(this, this.activity, playerId);
+              player.setPlayerAttributes(repeatMode, respectAudioFocus, this.playerMode);
+              player.play(this.audioObject, position);
+
+              audioPlayers.put(playerId, player);
+            }
+
           } else {
-            player = new BackgroundAudioPlayer();
-            player.initAudioPlayer(this, this.activity, playerId);
-            player.setPlayerAttributes(repeatMode, respectAudioFocus, this.playerMode);
-            player.play(this.audioObject, position);
+            final String smallIconFileName = call.argument("smallIconFileName");
+            final String title = call.argument("title");
+            final String subTitle = call.argument("subTitle");
+            final String largeIconUrl = call.argument("largeIconUrl");
+            final boolean isLocal = call.argument("isLocal");
+            final int notificationDefaultActionsInt = call.argument("notificationDefaultActions");
+            final int notificationActionCallbackModeInt = call.argument("notificationActionCallbackMode");
+            final int notificationCustomActionsInt = call.argument("notificationCustomActions");
 
-            audioPlayers.put(playerId, player);
+            this.tempPlayer = player;
+            this.tempPlayerId = playerId;
+            this.tempRepeatMode = repeatMode;
+            this.tempRespectAudioFocus = respectAudioFocus;
+            this.tempAudioPlayerPlugin = this;
+            this.tempPos = position;
+
+            NotificationDefaultActions notificationDefaultActions;
+            NotificationActionCallbackMode notificationActionCallbackMode;
+            NotificationCustomActions notificationCustomActions;
+            if (notificationDefaultActionsInt == 0) {
+              notificationDefaultActions = NotificationDefaultActions.NONE;
+            } else if (notificationDefaultActionsInt == 1) {
+              notificationDefaultActions = NotificationDefaultActions.NEXT;
+            } else if (notificationDefaultActionsInt == 2) {
+              notificationDefaultActions = NotificationDefaultActions.PREVIOUS;
+            } else {
+              notificationDefaultActions = NotificationDefaultActions.ALL;
+            }
+
+            if (notificationCustomActionsInt == 1) {
+              notificationCustomActions = NotificationCustomActions.ONE;
+            } else if (notificationCustomActionsInt == 2) {
+              notificationCustomActions = NotificationCustomActions.TWO;
+            } else {
+              notificationCustomActions = NotificationCustomActions.DISABLED;
+            }
+
+            if (notificationActionCallbackModeInt == 0) {
+              notificationActionCallbackMode = NotificationActionCallbackMode.DEFAULT;
+            } else {
+              notificationActionCallbackMode = NotificationActionCallbackMode.CUSTOM;
+            }
+
+            this.audioObject = new AudioObject(url, smallIconFileName, title, subTitle, largeIconUrl, isLocal,
+                notificationDefaultActions, notificationActionCallbackMode, notificationCustomActions);
+            // init player as ForegroundAudioPlayer service
+            if (player != null && !player.isPlayerReleased()) {
+              player.play(this.audioObject, position);
+            } else {
+              startForegroundPlayer();
+            }
           }
+          break;
+        }
+        case "playAll": {
+          final ArrayList<String> urls = call.argument("urls");
+          final boolean repeatMode = call.argument("repeatMode");
+          final boolean isBackground = call.argument("isBackground");
+          final boolean respectAudioFocus = call.argument("respectAudioFocus");
+          final int index = call.argument("index");
+          final int position = call.argument("position");
 
-        } else {
+          this.playerMode = PlayerMode.PLAYLIST;
+          if (isBackground) {
+            // init player as BackgroundAudioPlayer instance
+            for (String url : urls) {
+              this.audioObjects.add(new AudioObject(url));
+            }
+            if (player != null && !player.isPlayerReleased()) {
+              player.playAll((ArrayList<AudioObject>) this.audioObjects.clone(), index, position);
+            } else {
+              player = new BackgroundAudioPlayer();
+              player.initAudioPlayer(this, this.activity, playerId);
+              player.setPlayerAttributes(repeatMode, respectAudioFocus, this.playerMode);
+              player.playAll((ArrayList<AudioObject>) this.audioObjects.clone(), index, position);
+
+              audioPlayers.put(playerId, player);
+            }
+          } else {
+            final ArrayList<String> smallIconFileNames = call.argument("smallIconFileNames");
+            final ArrayList<String> titles = call.argument("titles");
+            final ArrayList<String> subTitles = call.argument("subTitles");
+            final ArrayList<String> largeIconUrls = call.argument("largeIconUrls");
+            final ArrayList<Boolean> isLocals = call.argument("isLocals");
+            final ArrayList<Integer> notificationDefaultActionsInts = call.argument("notificationDefaultActionsList");
+            final ArrayList<Integer> notificationActionCallbackModeInts = call
+                .argument("notificationActionCallbackModes");
+            final ArrayList<Integer> notificationCustomActionsInts = call.argument("notificationCustomActionsList");
+
+            this.tempPlayer = player;
+            this.tempPlayerId = playerId;
+            this.tempRepeatMode = repeatMode;
+            this.tempRespectAudioFocus = respectAudioFocus;
+            this.tempAudioPlayerPlugin = this;
+            this.tempIndex = index;
+            this.tempPos = position;
+
+            for (int i = 0; i < urls.size(); i++) {
+              NotificationDefaultActions notificationDefaultActions;
+              NotificationActionCallbackMode notificationActionCallbackMode;
+              NotificationCustomActions notificationCustomActions;
+              if (notificationDefaultActionsInts.get(i) == 0) {
+                notificationDefaultActions = NotificationDefaultActions.NONE;
+              } else if (notificationDefaultActionsInts.get(i) == 1) {
+                notificationDefaultActions = NotificationDefaultActions.NEXT;
+              } else if (notificationDefaultActionsInts.get(i) == 2) {
+                notificationDefaultActions = NotificationDefaultActions.PREVIOUS;
+              } else {
+                notificationDefaultActions = NotificationDefaultActions.ALL;
+              }
+
+              if (notificationCustomActionsInts.get(i) == 1) {
+                notificationCustomActions = NotificationCustomActions.ONE;
+              } else if (notificationCustomActionsInts.get(i) == 2) {
+                notificationCustomActions = NotificationCustomActions.TWO;
+              } else {
+                notificationCustomActions = NotificationCustomActions.DISABLED;
+              }
+
+              if (notificationActionCallbackModeInts.get(i) == 0) {
+                notificationActionCallbackMode = NotificationActionCallbackMode.DEFAULT;
+              } else {
+                notificationActionCallbackMode = NotificationActionCallbackMode.CUSTOM;
+              }
+
+              this.audioObjects.add(new AudioObject(urls.get(i), smallIconFileNames.get(i), titles.get(i),
+                  subTitles.get(i), largeIconUrls.get(i), isLocals.get(i), notificationDefaultActions,
+                  notificationActionCallbackMode, notificationCustomActions));
+            }
+            // init player as ForegroundAudioPlayer service
+            if (player != null && !player.isPlayerReleased()) {
+              player.playAll((ArrayList<AudioObject>) this.audioObjects.clone(), index, position);
+            } else {
+              startForegroundPlayer();
+            }
+          }
+          break;
+        }
+        case "next": {
+          player.next();
+          break;
+        }
+        case "previous": {
+          player.previous();
+          break;
+        }
+        case "resume": {
+          player.resume();
+          break;
+        }
+        case "pause": {
+          player.pause();
+          break;
+        }
+        case "stop": {
+          player.stop();
+          break;
+        }
+        case "release": {
+          if (!player.isBackground() && !player.isPlayerReleased()) {
+            this.context.unbindService(connection);
+          }
+          audioPlayers.remove(player.getPlayerId());
+          player.release();
+          break;
+        }
+        case "seekPosition": {
+          final int position = call.argument("position");
+          player.seekPosition(position);
+          break;
+        }
+        case "seekIndex": {
+          final int index = call.argument("index");
+          player.seekIndex(index);
+          break;
+        }
+        case "setVolume": {
+          final double vol = call.argument("volume");
+          final float volume = (float) vol;
+          player.setVolume(volume);
+          break;
+        }
+        case "setRepeatMode": {
+          final boolean repeatMode = call.argument("repeatMode");
+          player.setRepeatMode(repeatMode);
+          break;
+        }
+        case "setPlaybackSpeed": {
+          final double spd = call.argument("speed");
+          final float speed = (float) spd;
+          player.setPlaybackSpeed(speed);
+          break;
+        }
+        case "setAudioObject": {
           final String smallIconFileName = call.argument("smallIconFileName");
           final String title = call.argument("title");
           final String subTitle = call.argument("subTitle");
           final String largeIconUrl = call.argument("largeIconUrl");
-          final boolean isLocal = call.argument("isLocal");
           final int notificationDefaultActionsInt = call.argument("notificationDefaultActions");
           final int notificationActionCallbackModeInt = call.argument("notificationActionCallbackMode");
           final int notificationCustomActionsInt = call.argument("notificationCustomActions");
-
-          this.tempPlayer = player;
-          this.tempPlayerId = playerId;
-          this.tempRepeatMode = repeatMode;
-          this.tempRespectAudioFocus = respectAudioFocus;
-          this.tempAudioPlayerPlugin = this;
-          this.tempPos = position;
 
           NotificationDefaultActions notificationDefaultActions;
           NotificationActionCallbackMode notificationActionCallbackMode;
@@ -183,60 +370,23 @@ public class AudioPlayerPlugin implements MethodCallHandler {
             notificationActionCallbackMode = NotificationActionCallbackMode.CUSTOM;
           }
 
-          this.audioObject = new AudioObject(url, smallIconFileName, title, subTitle, largeIconUrl, isLocal,
+          this.audioObject = new AudioObject(smallIconFileName, title, subTitle, largeIconUrl,
               notificationDefaultActions, notificationActionCallbackMode, notificationCustomActions);
-          // init player as ForegroundAudioPlayer service
-          if (player != null && !player.isPlayerReleased()) {
-            player.play(this.audioObject, position);
-          } else {
-            startForegroundPlayer();
-          }
+
+          player.setAudioObject(this.audioObject);
+          return;
         }
-        break;
-      }
-      case "playAll": {
-        final ArrayList<String> urls = call.argument("urls");
-        final boolean repeatMode = call.argument("repeatMode");
-        final boolean isBackground = call.argument("isBackground");
-        final boolean respectAudioFocus = call.argument("respectAudioFocus");
-        final int index = call.argument("index");
-        final int position = call.argument("position");
-
-        this.playerMode = PlayerMode.PLAYLIST;
-        if (isBackground) {
-          // init player as BackgroundAudioPlayer instance
-          for (String url : urls) {
-            this.audioObjects.add(new AudioObject(url));
-          }
-          if (player != null && !player.isPlayerReleased()) {
-            player.playAll((ArrayList<AudioObject>) this.audioObjects.clone(), index, position);
-          } else {
-            player = new BackgroundAudioPlayer();
-            player.initAudioPlayer(this, this.activity, playerId);
-            player.setPlayerAttributes(repeatMode, respectAudioFocus, this.playerMode);
-            player.playAll((ArrayList<AudioObject>) this.audioObjects.clone(), index, position);
-
-            audioPlayers.put(playerId, player);
-          }
-        } else {
+        case "setAudioObjects": {
           final ArrayList<String> smallIconFileNames = call.argument("smallIconFileNames");
           final ArrayList<String> titles = call.argument("titles");
           final ArrayList<String> subTitles = call.argument("subTitles");
           final ArrayList<String> largeIconUrls = call.argument("largeIconUrls");
-          final ArrayList<Boolean> isLocals = call.argument("isLocals");
           final ArrayList<Integer> notificationDefaultActionsInts = call.argument("notificationDefaultActionsList");
-          final ArrayList<Integer> notificationActionCallbackModeInts = call.argument("notificationActionCallbackModes");
+          final ArrayList<Integer> notificationActionCallbackModeInts = call
+              .argument("notificationActionCallbackModes");
           final ArrayList<Integer> notificationCustomActionsInts = call.argument("notificationCustomActionsList");
 
-          this.tempPlayer = player;
-          this.tempPlayerId = playerId;
-          this.tempRepeatMode = repeatMode;
-          this.tempRespectAudioFocus = respectAudioFocus;
-          this.tempAudioPlayerPlugin = this;
-          this.tempIndex = index;
-          this.tempPos = position;
-
-          for (int i = 0; i < urls.size(); i++) {
+          for (int i = 0; i < smallIconFileNames.size(); i++) {
             NotificationDefaultActions notificationDefaultActions;
             NotificationActionCallbackMode notificationActionCallbackMode;
             NotificationCustomActions notificationCustomActions;
@@ -264,232 +414,85 @@ public class AudioPlayerPlugin implements MethodCallHandler {
               notificationActionCallbackMode = NotificationActionCallbackMode.CUSTOM;
             }
 
-            this.audioObjects.add(new AudioObject(urls.get(i), smallIconFileNames.get(i), titles.get(i),
-                subTitles.get(i), largeIconUrls.get(i), isLocals.get(i), notificationDefaultActions,
-                notificationActionCallbackMode, notificationCustomActions));
+            this.audioObjects
+                .add(new AudioObject(smallIconFileNames.get(i), titles.get(i), subTitles.get(i), largeIconUrls.get(i),
+                    notificationDefaultActions, notificationActionCallbackMode, notificationCustomActions));
           }
-          // init player as ForegroundAudioPlayer service
-          if (player != null && !player.isPlayerReleased()) {
-            player.playAll((ArrayList<AudioObject>) this.audioObjects.clone(), index, position);
-          } else {
-            startForegroundPlayer();
-          }
+
+          player.setAudioObjects(this.audioObjects);
+          return;
         }
-        break;
-      }
-      case "next": {
-        player.next();
-        break;
-      }
-      case "previous": {
-        player.previous();
-        break;
-      }
-      case "resume": {
-        player.resume();
-        break;
-      }
-      case "pause": {
-        player.pause();
-        break;
-      }
-      case "stop": {
-        player.stop();
-        break;
-      }
-      case "release": {
-        if (!player.isBackground() && !player.isPlayerReleased()) {
-          this.context.unbindService(connection);
-        }
-        audioPlayers.remove(player.getPlayerId());
-        player.release();
-        break;
-      }
-      case "seekPosition": {
-        final int position = call.argument("position");
-        player.seekPosition(position);
-        break;
-      }
-      case "seekIndex": {
-        final int index = call.argument("index");
-        player.seekIndex(index);
-        break;
-      }
-      case "setVolume": {
-        final double vol = call.argument("volume");
-        final float volume = (float) vol;
-        player.setVolume(volume);
-        break;
-      }
-      case "setRepeatMode": {
-        final boolean repeatMode = call.argument("repeatMode");
-        player.setRepeatMode(repeatMode);
-        break;
-      }
-      case "setPlaybackSpeed": {
-        final double spd = call.argument("speed");
-        final float speed = (float) spd;
-        player.setPlaybackSpeed(speed);
-        break;
-      }
-      case "setAudioObject": {
-        final String smallIconFileName = call.argument("smallIconFileName");
-        final String title = call.argument("title");
-        final String subTitle = call.argument("subTitle");
-        final String largeIconUrl = call.argument("largeIconUrl");
-        final int notificationDefaultActionsInt = call.argument("notificationDefaultActions");
-        final int notificationActionCallbackModeInt = call.argument("notificationActionCallbackMode");
-        final int notificationCustomActionsInt = call.argument("notificationCustomActions");
+        case "setSpecificAudioNotification": {
+          final String smallIconFileName = call.argument("smallIconFileName");
+          final String title = call.argument("title");
+          final String subTitle = call.argument("subTitle");
+          final String largeIconUrl = call.argument("largeIconUrl");
+          final int notificationDefaultActionsInt = call.argument("notificationDefaultActions");
+          final int notificationActionCallbackModeInt = call.argument("notificationActionCallbackMode");
+          final int notificationCustomActionsInt = call.argument("notificationCustomActions");
+          final int index = call.argument("index");
 
-        NotificationDefaultActions notificationDefaultActions;
-        NotificationActionCallbackMode notificationActionCallbackMode;
-        NotificationCustomActions notificationCustomActions;
-        if (notificationDefaultActionsInt == 0) {
-          notificationDefaultActions = NotificationDefaultActions.NONE;
-        } else if (notificationDefaultActionsInt == 1) {
-          notificationDefaultActions = NotificationDefaultActions.NEXT;
-        } else if (notificationDefaultActionsInt == 2) {
-          notificationDefaultActions = NotificationDefaultActions.PREVIOUS;
-        } else {
-          notificationDefaultActions = NotificationDefaultActions.ALL;
-        }
-
-        if (notificationCustomActionsInt == 1) {
-          notificationCustomActions = NotificationCustomActions.ONE;
-        } else if (notificationCustomActionsInt == 2) {
-          notificationCustomActions = NotificationCustomActions.TWO;
-        } else {
-          notificationCustomActions = NotificationCustomActions.DISABLED;
-        }
-
-        if (notificationActionCallbackModeInt == 0) {
-          notificationActionCallbackMode = NotificationActionCallbackMode.DEFAULT;
-        } else {
-          notificationActionCallbackMode = NotificationActionCallbackMode.CUSTOM;
-        }
-
-        this.audioObject = new AudioObject(smallIconFileName, title, subTitle, largeIconUrl, notificationDefaultActions,
-            notificationActionCallbackMode, notificationCustomActions);
-
-        player.setAudioObject(this.audioObject);
-        return;
-      }
-      case "setAudioObjects": {
-        final ArrayList<String> smallIconFileNames = call.argument("smallIconFileNames");
-        final ArrayList<String> titles = call.argument("titles");
-        final ArrayList<String> subTitles = call.argument("subTitles");
-        final ArrayList<String> largeIconUrls = call.argument("largeIconUrls");
-        final ArrayList<Integer> notificationDefaultActionsInts = call.argument("notificationDefaultActionsList");
-        final ArrayList<Integer> notificationActionCallbackModeInts = call.argument("notificationActionCallbackModes");
-        final ArrayList<Integer> notificationCustomActionsInts = call.argument("notificationCustomActionsList");
-
-        for (int i = 0; i < smallIconFileNames.size(); i++) {
           NotificationDefaultActions notificationDefaultActions;
           NotificationActionCallbackMode notificationActionCallbackMode;
           NotificationCustomActions notificationCustomActions;
-          if (notificationDefaultActionsInts.get(i) == 0) {
+          if (notificationDefaultActionsInt == 0) {
             notificationDefaultActions = NotificationDefaultActions.NONE;
-          } else if (notificationDefaultActionsInts.get(i) == 1) {
+          } else if (notificationDefaultActionsInt == 1) {
             notificationDefaultActions = NotificationDefaultActions.NEXT;
-          } else if (notificationDefaultActionsInts.get(i) == 2) {
+          } else if (notificationDefaultActionsInt == 2) {
             notificationDefaultActions = NotificationDefaultActions.PREVIOUS;
           } else {
             notificationDefaultActions = NotificationDefaultActions.ALL;
           }
 
-          if (notificationCustomActionsInts.get(i) == 1) {
+          if (notificationCustomActionsInt == 1) {
             notificationCustomActions = NotificationCustomActions.ONE;
-          } else if (notificationCustomActionsInts.get(i) == 2) {
+          } else if (notificationCustomActionsInt == 2) {
             notificationCustomActions = NotificationCustomActions.TWO;
           } else {
             notificationCustomActions = NotificationCustomActions.DISABLED;
           }
 
-          if (notificationActionCallbackModeInts.get(i) == 0) {
+          if (notificationActionCallbackModeInt == 0) {
             notificationActionCallbackMode = NotificationActionCallbackMode.DEFAULT;
           } else {
             notificationActionCallbackMode = NotificationActionCallbackMode.CUSTOM;
           }
 
-          this.audioObjects
-              .add(new AudioObject(smallIconFileNames.get(i), titles.get(i), subTitles.get(i), largeIconUrls.get(i),
-                  notificationDefaultActions, notificationActionCallbackMode, notificationCustomActions));
+          this.audioObject = new AudioObject(smallIconFileName, title, subTitle, largeIconUrl,
+              notificationDefaultActions, notificationActionCallbackMode, notificationCustomActions);
+
+          player.setSpecificAudioObject(this.audioObject, index);
+          return;
         }
-
-        player.setAudioObjects(this.audioObjects);
-        return;
-      }
-      case "setSpecificAudioNotification": {
-        final String smallIconFileName = call.argument("smallIconFileName");
-        final String title = call.argument("title");
-        final String subTitle = call.argument("subTitle");
-        final String largeIconUrl = call.argument("largeIconUrl");
-        final int notificationDefaultActionsInt = call.argument("notificationDefaultActions");
-        final int notificationActionCallbackModeInt = call.argument("notificationActionCallbackMode");
-        final int notificationCustomActionsInt = call.argument("notificationCustomActions");
-        final int index = call.argument("index");
-
-        NotificationDefaultActions notificationDefaultActions;
-        NotificationActionCallbackMode notificationActionCallbackMode;
-        NotificationCustomActions notificationCustomActions;
-        if (notificationDefaultActionsInt == 0) {
-          notificationDefaultActions = NotificationDefaultActions.NONE;
-        } else if (notificationDefaultActionsInt == 1) {
-          notificationDefaultActions = NotificationDefaultActions.NEXT;
-        } else if (notificationDefaultActionsInt == 2) {
-          notificationDefaultActions = NotificationDefaultActions.PREVIOUS;
-        } else {
-          notificationDefaultActions = NotificationDefaultActions.ALL;
+        case "getVolume": {
+          response.success(player.getVolume());
+          return;
         }
-
-        if (notificationCustomActionsInt == 1) {
-          notificationCustomActions = NotificationCustomActions.ONE;
-        } else if (notificationCustomActionsInt == 2) {
-          notificationCustomActions = NotificationCustomActions.TWO;
-        } else {
-          notificationCustomActions = NotificationCustomActions.DISABLED;
+        case "getDuration": {
+          response.success(player.getDuration());
+          return;
         }
-
-        if (notificationActionCallbackModeInt == 0) {
-          notificationActionCallbackMode = NotificationActionCallbackMode.DEFAULT;
-        } else {
-          notificationActionCallbackMode = NotificationActionCallbackMode.CUSTOM;
+        case "getCurrentPosition": {
+          response.success(player.getCurrentPosition());
+          return;
         }
-
-        this.audioObject = new AudioObject(smallIconFileName, title, subTitle, largeIconUrl, notificationDefaultActions,
-            notificationActionCallbackMode, notificationCustomActions);
-
-        player.setSpecificAudioObject(this.audioObject, index);
-        return;
-      }
-      case "getVolume": {
-        response.success(player.getVolume());
-        return;
-      }
-      case "getDuration": {
-        response.success(player.getDuration());
-        return;
-      }
-      case "getCurrentPosition": {
-        response.success(player.getCurrentPosition());
-        return;
-      }
-      case "getCurrentPlayingAudioIndex": {
-        response.success(player.getCurrentPlayingAudioIndex());
-        return;
-      }
-      case "getPlaybackSpeed": {
-        response.success(player.getPlaybackSpeed());
-        return;
-      }
-      case "dispose": {
-        dispose();
-        return;
-      }
-      default: {
-        response.notImplemented();
-        return;
-      }
+        case "getCurrentPlayingAudioIndex": {
+          response.success(player.getCurrentPlayingAudioIndex());
+          return;
+        }
+        case "getPlaybackSpeed": {
+          response.success(player.getPlaybackSpeed());
+          return;
+        }
+        case "dispose": {
+          dispose();
+          return;
+        }
+        default: {
+          response.notImplemented();
+          return;
+        }
       }
       response.success(2); // success
     } else {
@@ -499,24 +502,24 @@ public class AudioPlayerPlugin implements MethodCallHandler {
 
   public void handleNotificationActionCallback(AudioPlayer audioplayer, NotificationActionName notificationActionName) {
     switch (notificationActionName) {
-    case PREVIOUS:
-      channel.invokeMethod("audio.onNotificationActionCallback", buildArguments(audioplayer.getPlayerId(), 0));
-      break;
-    case NEXT:
-      channel.invokeMethod("audio.onNotificationActionCallback", buildArguments(audioplayer.getPlayerId(), 1));
-      break;
-    case PLAY:
-      channel.invokeMethod("audio.onNotificationActionCallback", buildArguments(audioplayer.getPlayerId(), 2));
-      break;
-    case PAUSE:
-      channel.invokeMethod("audio.onNotificationActionCallback", buildArguments(audioplayer.getPlayerId(), 3));
-      break;
-    case CUSTOM1:
-      channel.invokeMethod("audio.onNotificationActionCallback", buildArguments(audioplayer.getPlayerId(), 4));
-      break;
-    case CUSTOM2:
-      channel.invokeMethod("audio.onNotificationActionCallback", buildArguments(audioplayer.getPlayerId(), 5));
-      break;
+      case PREVIOUS:
+        channel.invokeMethod("audio.onNotificationActionCallback", buildArguments(audioplayer.getPlayerId(), 0));
+        break;
+      case NEXT:
+        channel.invokeMethod("audio.onNotificationActionCallback", buildArguments(audioplayer.getPlayerId(), 1));
+        break;
+      case PLAY:
+        channel.invokeMethod("audio.onNotificationActionCallback", buildArguments(audioplayer.getPlayerId(), 2));
+        break;
+      case PAUSE:
+        channel.invokeMethod("audio.onNotificationActionCallback", buildArguments(audioplayer.getPlayerId(), 3));
+        break;
+      case CUSTOM1:
+        channel.invokeMethod("audio.onNotificationActionCallback", buildArguments(audioplayer.getPlayerId(), 4));
+        break;
+      case CUSTOM2:
+        channel.invokeMethod("audio.onNotificationActionCallback", buildArguments(audioplayer.getPlayerId(), 5));
+        break;
     }
   }
 
@@ -531,30 +534,30 @@ public class AudioPlayerPlugin implements MethodCallHandler {
 
   public void handleStateChange(AudioPlayer audioplayer, PlayerState playerState) {
     switch (playerState) {
-    case RELEASED: { // -1
-      channel.invokeMethod("audio.onStateChanged", buildArguments(audioplayer.getPlayerId(), -1));
-      break;
-    }
-    case STOPPED: { // 0
-      channel.invokeMethod("audio.onStateChanged", buildArguments(audioplayer.getPlayerId(), 0));
-      break;
-    }
-    case BUFFERING: { // 1
-      channel.invokeMethod("audio.onStateChanged", buildArguments(audioplayer.getPlayerId(), 1));
-      break;
-    }
-    case PLAYING: { // 2
-      channel.invokeMethod("audio.onStateChanged", buildArguments(audioplayer.getPlayerId(), 2));
-      break;
-    }
-    case PAUSED: { // 3
-      channel.invokeMethod("audio.onStateChanged", buildArguments(audioplayer.getPlayerId(), 3));
-      break;
-    }
-    case COMPLETED: { // 4
-      channel.invokeMethod("audio.onStateChanged", buildArguments(audioplayer.getPlayerId(), 4));
-      break;
-    }
+      case RELEASED: { // -1
+        channel.invokeMethod("audio.onStateChanged", buildArguments(audioplayer.getPlayerId(), -1));
+        break;
+      }
+      case STOPPED: { // 0
+        channel.invokeMethod("audio.onStateChanged", buildArguments(audioplayer.getPlayerId(), 0));
+        break;
+      }
+      case BUFFERING: { // 1
+        channel.invokeMethod("audio.onStateChanged", buildArguments(audioplayer.getPlayerId(), 1));
+        break;
+      }
+      case PLAYING: { // 2
+        channel.invokeMethod("audio.onStateChanged", buildArguments(audioplayer.getPlayerId(), 2));
+        break;
+      }
+      case PAUSED: { // 3
+        channel.invokeMethod("audio.onStateChanged", buildArguments(audioplayer.getPlayerId(), 3));
+        break;
+      }
+      case COMPLETED: { // 4
+        channel.invokeMethod("audio.onStateChanged", buildArguments(audioplayer.getPlayerId(), 4));
+        break;
+      }
     }
   }
 
@@ -567,13 +570,14 @@ public class AudioPlayerPlugin implements MethodCallHandler {
   }
 
   private void startForegroundPlayer() {
-    if (!isMyServiceRunning(ForegroundAudioPlayer.class)) {
-      ContextCompat.startForegroundService(this.context, new Intent(this.context, ForegroundAudioPlayer.class));
-      this.context.bindService(new Intent(this.context, ForegroundAudioPlayer.class), connection,
-          Context.BIND_AUTO_CREATE);
-    } else {
-      Log.e("AudioPlayerPlugin", "Can't start more than 1 service at a time, to stop service call release method");
-    }
+    // if (!isMyServiceRunning(ForegroundAudioPlayer.class)) {
+    ContextCompat.startForegroundService(this.context, new Intent(this.context, ForegroundAudioPlayer.class));
+    this.context.bindService(new Intent(this.context, ForegroundAudioPlayer.class), connection,
+        Context.BIND_AUTO_CREATE);
+    // } else {
+    // Log.e("AudioPlayerPlugin", "Can't start more than 1 service at a time, to
+    // stop service call release method");
+    // }
   }
 
   private void startPositionUpdates() {

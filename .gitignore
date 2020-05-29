@@ -16,3 +16,7 @@ testing
 pubspec.lock
 android/local.properties
 example/ios/Flutter/flutter_export_environment.sh
+
+android/gradle/wrapper/
+android/gradlew
+android/gradlew.bat
